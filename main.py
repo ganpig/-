@@ -1,12 +1,12 @@
 import os
 import sys
 import time
+import tkinter
+import tkinter.colorchooser
 from configparser import ConfigParser
 
 import easygui
 import pygame
-import sympy
-from sympy.abc import A, B, C, X
 
 WINDOW_SIZE = (1000, 600)
 WINDOW_TITLE = '抛物线演示器'
@@ -20,7 +20,21 @@ except:
 
 def my_round(x, n=0):
     x = round(x, n) if n else round(x)
-    return x if x else 0
+    return int(x) if int(x) == x else x
+
+
+def gcd(a, b):
+    while b:
+        a, b = b, a % b
+    return a
+
+
+def askcolor(default, title):
+    tk = tkinter.Tk()
+    tk.withdraw()
+    color = tkinter.colorchooser.askcolor(default, title=title)[1]
+    tk.destroy()
+    return color
 
 
 class Window:
@@ -29,7 +43,7 @@ class Window:
         self.screen = pygame.display.set_mode(WINDOW_SIZE)
         pygame.display.set_caption(WINDOW_TITLE)
         self.fonts = [[pygame.font.Font(os.path.join(
-            RESOURCES, m), 15+i*10) for i in range(4)] for m in ('FZFWQingYinTiJWL.ttf', 'CascadiaCode.ttf')]
+            RESOURCES, m), 18+i*8) for i in range(4)] for m in ('FZFWQingYinTiJWL.ttf', 'CascadiaCode.ttf')]
         self.mouse_pos = (0, 0)
         self.cp = cp
 
@@ -44,26 +58,47 @@ class Window:
             self.apply_bg_mode('image')
 
         # 设置主题颜色
-        self.main_color_hex = self.get_or_set('main_color', '#ffffff')
         try:
+            self.main_color_hex = self.get_or_set('main_color', '#ffffff')
             self.main_color = [int(self.main_color_hex[i:i+2], 16)
                                for i in range(1, 7, 2)]
         except:
-            self.error('config.txt 中的主题颜色格式不正确，已修改为默认值 #ffffff。')
-            self.main_color_hex = '#ffffff'
             self.main_color = (255, 255, 255)
             self.cp.set('window', 'main_color', '#ffffff')
 
         # 设置网格颜色
-        self.grid_color_hex = self.get_or_set('grid_color', '#00ffff')
         try:
+            self.grid_color_hex = self.get_or_set('grid_color', '#00ffff')
             self.grid_color = [int(self.grid_color_hex[i:i+2], 16)
                                for i in range(1, 7, 2)]
         except:
-            self.error('config.txt 中的网格颜色格式不正确，已修改为默认值 #00ffff。')
-            self.grid_color_hex = '#00ffff'
             self.grid_color = (0, 255, 255)
             self.cp.set('window', 'grid_color', '#00ffff')
+
+        # 设置网格不透明度
+        try:
+            self.grid_alpha = int(self.get_or_set('grid_alpha', '100'))
+            assert(0 <= self.grid_alpha <= 255)
+        except:
+            self.grid_alpha = 100
+            self.cp.set('window', 'grid_alpha', '100')
+
+        # 设置坐标轴颜色
+        try:
+            self.axis_color_hex = self.get_or_set('axis_color', '#00ffff')
+            self.axis_color = [int(self.axis_color_hex[i:i+2], 16)
+                               for i in range(1, 7, 2)]
+        except:
+            self.axis_color = (0, 255, 255)
+            self.cp.set('window', 'axis_color', '#00ffff')
+
+        # 设置坐标轴不透明度
+        try:
+            self.axis_alpha = int(self.get_or_set('axis_alpha', '255'))
+            assert(0 <= self.axis_alpha <= 255)
+        except:
+            self.axis_alpha = 255
+            self.cp.set('window', 'axis_alpha', '255')
 
         self.cp.write(open('config.ini', 'w', encoding='utf-8'))
 
@@ -84,7 +119,6 @@ class Window:
                 self.bg_color = tuple(int(self.background[i:i+2], 16)
                                       for i in range(1, 7, 2))
             except:
-                self.error('config.txt 中的窗口背景颜色格式不正确，已修改为默认值 #000000。')
                 self.background = '#000000'
                 self.bg_color = (0, 0, 0)
                 self.cp.set('window', 'background', '#000000')
@@ -93,32 +127,22 @@ class Window:
                 self.bg_image = pygame.transform.scale(
                     pygame.image.load(self.background), WINDOW_SIZE)
                 self.bg_image_with_mask = self.bg_image.copy()
+                self.bg_color = (0, 0, 0)
                 self.bg_mode = 'image'
-                # 设置蒙版不透明度
                 try:
-                    self.mask_alpha = int(self.get_or_set('mask_alpha', '127'))
+                    self.mask_alpha = int(self.get_or_set('mask_alpha', '200'))
                     assert(0 <= self.mask_alpha <= 255)
                 except:
-                    self.error('config.txt 中的蒙版不透明度格式不正确，已修改为默认值 127。')
-                    self.mask_alpha = 127
-                    self.cp.set('window', 'mask_alpha', '127')
+                    self.mask_alpha = 200
+                    self.cp.set('window', 'mask_alpha', '200')
                 mask = pygame.Surface(WINDOW_SIZE, pygame.SRCALPHA)
                 mask.fill((0, 0, 0, self.mask_alpha))
                 self.bg_image_with_mask.blit(mask, (0, 0))
             except:
-                self.error('config.txt 中的窗口背景图片无法加载，已修改为使用颜色 #000000 填充。')
                 self.bg_mode = 'color'
                 self.background = '#000000'
                 self.bg_color = (0, 0, 0)
                 self.cp.set('window', 'background', '#000000')
-
-        try:
-            self.grid_alpha = int(self.get_or_set('grid_alpha', '127'))
-            assert(0 <= self.grid_alpha <= 255)
-        except:
-            self.error('config.txt 中的网格不透明度格式不正确，已修改为默认值 127。')
-            self.grid_alpha = 127
-            self.cp.set('window', 'grid_alpha', '127')
 
     def change_bg_mode(self) -> None:
         """
@@ -136,53 +160,40 @@ class Window:
         """
         设置背景颜色。
         """
-        color = easygui.enterbox(
-            '请输入十六进制格式的背景颜色', default=self.background if self.bg_mode == 'color' else '#000000')
-        if not color:
-            return
-        if color.startswith('#') and len(color) == 7 and all(c in '0123456789abcdef' for c in color[1:]):
+        color = askcolor(self.bg_color, '选择背景颜色')
+        if color:
             self.background = color
             self.apply_bg_mode('color')
             self.cp.set('window', 'background', color)
             self.cp.write(open('config.ini', 'w', encoding='utf-8'))
-        else:
-            self.error('背景颜色格式不正确，请重新输入。')
-            self.set_bg_color()
 
     def set_bg_image(self) -> None:
         """
         设置背景图片。
         """
-        image = easygui.fileopenbox('请选择背景图片')
-        if not image:
-            return
-        try:
-            pygame.image.load(image)
-            self.background = image
-            self.apply_bg_mode('image')
-            self.cp.set('window', 'background', image)
-            self.cp.write(open('config.ini', 'w', encoding='utf-8'))
-        except:
-            self.error('无法加载所选的背景图片，请重新选择。')
-            self.set_bg_image()
+        image = easygui.fileopenbox('选择背景图片')
+        if image:
+            try:
+                pygame.image.load(image)
+                self.background = image
+                self.apply_bg_mode('image')
+                self.cp.set('window', 'background', image)
+                self.cp.write(open('config.ini', 'w', encoding='utf-8'))
+            except:
+                self.error('无法加载所选的背景图片，请重新选择。')
+                self.set_bg_image()
 
     def set_main_color(self) -> None:
         """
         设置主题颜色。
         """
-        color = easygui.enterbox(
-            '请输入十六进制格式的主题颜色', default=self.main_color_hex)
-        if not color:
-            return
-        if color.startswith('#') and len(color) == 7 and all(c in '0123456789abcdef' for c in color[1:]):
+        color = askcolor(self.main_color_hex, '选择主题颜色')
+        if color:
             self.main_color_hex = color
             self.main_color = [int(color[i:i+2], 16)
                                for i in range(1, 7, 2)]
             self.cp.set('window', 'main_color', color)
             self.cp.write(open('config.ini', 'w', encoding='utf-8'))
-        else:
-            self.error('主题颜色格式不正确，请重新输入。')
-            self.set_main_color()
 
     def set_mask_alpha(self, value: float) -> None:
         """
@@ -207,11 +218,12 @@ class Window:
         pygame.draw.line(self.screen, self.main_color,
                          (SIDEBAR_LEFT, 0), (SIDEBAR_LEFT, 600), 3)
 
-    def draw_text(self, text: str, pos: tuple, align: str = 'topleft', size: int = 1, font: int = 0) -> pygame.Rect:
+    def draw_text(self, text: str, pos: tuple, align: str = 'topleft', size: int = 1, font: int = 0, color: tuple = None) -> pygame.Rect:
         """
         绘制文字。
         """
-        render = self.fonts[font][size].render(text, True, self.main_color)
+        render = self.fonts[font][size].render(
+            text, True, color if color else self.main_color)
         rect = render.get_rect()
         exec(f'rect.{align}=pos')
         return self.screen.blit(render, rect)
@@ -254,13 +266,14 @@ class Window:
 
 
 class Button:
-    def __init__(self, window: Window, icon: pygame.Surface, pos: tuple, align: str = 'topleft', todo=lambda: print('Ding dong~'), background: str = None) -> None:
+    def __init__(self, window: Window, icon: pygame.Surface, pos: tuple, align: str = 'topleft', todo=lambda: print('Ding dong~'), background: str = '', text: str = '') -> None:
         self.window = window
         self.icon = icon
         self.align = align
         self.size = icon.get_size()
         self.todo = todo
         self.background = background
+        self.text = text
         self.rect = self.icon.get_rect()
         exec(f'self.rect.{align}=pos')
         self.touch_time = 0
@@ -270,9 +283,9 @@ class Button:
             self.touch_time = time.time()
         elif self.touch_time > 0 and not self.rect.collidepoint(*self.window.mouse_pos):
             self.touch_time = -time.time()-min(0.5, abs(time.time()-self.touch_time))
+        alpha = int((min(0.5, time.time()-self.touch_time) if self.touch_time
+                     > 0 else max(0, -time.time()-self.touch_time))*510)
         if self.background:
-            alpha = int((min(0.5, time.time()-self.touch_time) if self.touch_time
-                        > 0 else max(0, -time.time()-self.touch_time))*510)
             alpha_surface = pygame.Surface(
                 self.icon.get_size(), pygame.SRCALPHA)
             if self.background == 'circle':
@@ -283,6 +296,13 @@ class Button:
                 pygame.draw.rect(alpha_surface, (*self.window.main_color, alpha),
                                  pygame.Rect((0, 0), self.size), 0, 5)
             self.window.screen.blit(alpha_surface, self.rect)
+        if self.text:
+            tip = self.window.fonts[0][0].render(
+                self.text, True, (0, 0, 255), self.window.main_color)
+            tip.set_alpha(alpha)
+            rect = tip.get_rect()
+            rect.midright = self.rect.midleft
+            self.window.screen.blit(tip, rect)
         return self.window.screen.blit(self.icon, self.rect)
 
     def move(self, pos: tuple) -> None:
@@ -295,7 +315,7 @@ class Button:
 
 
 class Slider:
-    def __init__(self, window: Window, pos: tuple, length: int, width: int, align: str = 'topleft', size: int = 30, getvalue=None, setvalue=None, setdirectly=None, getlimit=lambda: (0, 1)) -> None:
+    def __init__(self, window: Window, pos: tuple, length: int, width: int, align: str = 'topleft', size: int = 30, getvalue=None, setvalue=None, setdirectly=None, sdtext='') -> None:
         self.window = window
         self.pos = pos
         self.length = length
@@ -305,12 +325,14 @@ class Slider:
         self.getvalue = getvalue
         self.setvalue = setvalue
         self.setdirectly = setdirectly
-        self.getlimit = getlimit
+        self.sdtext = sdtext
         self.setting = False
         self.click_pos = (0, 0)
         self.color = self.window.main_color
         self.icon = pygame.transform.scale(pygame.image.load(
             os.path.join(RESOURCES, 'icons', 'crystal.png')), (size, size))
+        self.warning = pygame.transform.scale(pygame.image.load(
+            os.path.join(RESOURCES, 'icons', 'warning.png')), (size, size))
         self.icon_rect = self.icon.get_rect()
         self.bar = pygame.Surface((length, width), pygame.SRCALPHA)
         pygame.draw.rect(self.bar, self.color,
@@ -333,23 +355,29 @@ class Slider:
             self.touch_time = time.time()
         elif self.touch_time > 0 and not self.icon_rect.collidepoint(*self.window.mouse_pos) and not self.setting:
             self.touch_time = -time.time()-min(0.5, abs(time.time()-self.touch_time))
-        if self.setting and self.window.mouse_pos != self.click_pos:
-            self.setvalue(
-                (self.window.mouse_pos[0]-self.bar_rect.left)/self.length)
-        limit = self.getlimit()
-        if self.getvalue() < limit[0]:
-            self.setvalue(limit[0])
-        elif self.getvalue() > limit[1]:
-            self.setvalue(limit[1])
+        if self.setting:
+            if not 0 <= self.getvalue() <= 1:
+                self.setvalue(max(0, min(1, self.getvalue())))
+            elif self.window.mouse_pos != self.click_pos:
+                self.setvalue(max(0, min(1,
+                                         (self.window.mouse_pos[0]-self.bar_rect.left-self.size/2)/(self.length-self.size))))
         alpha = int((min(0.5, time.time()-self.touch_time) if self.touch_time
                     > 0 else max(0, -time.time()-self.touch_time))*510)
         alpha_surface = pygame.Surface((self.size, self.size), pygame.SRCALPHA)
         pygame.draw.circle(alpha_surface, (*self.window.main_color,
                            alpha), (self.size//2, self.size//2), self.size//2)
         self.icon_rect.midbottom = (
-            self.bar_rect.left+self.bar_rect.width*self.getvalue(), self.bar_rect.centery)
+            self.bar_rect.left+self.size/2+(self.length-self.size)*max(0, min(1, self.getvalue())), self.bar_rect.centery)
         self.window.screen.blit(alpha_surface, self.icon_rect)
-        self.window.screen.blit(self.icon, self.icon_rect)
+        self.window.screen.blit(
+            self.icon if 0 <= self.getvalue() <= 1 else self.warning, self.icon_rect)
+        if self.touch_time > 0 and self.setdirectly and (not pygame.mouse.get_pressed()[0] or self.window.mouse_pos == self.click_pos):
+            tip = self.window.fonts[0][0].render(
+                '点击以精确设置'+self.sdtext, True, (0, 0, 255), self.window.main_color)
+            tip.set_alpha(alpha)
+            rect = tip.get_rect()
+            rect.midright = self.icon_rect.midleft
+            self.window.screen.blit(tip, rect)
         return self.bar_rect
 
     def move(self, pos: tuple) -> None:
@@ -362,9 +390,10 @@ class Slider:
             self.click_pos = mouse_pos
 
     def process_release_event(self, mouse_pos: tuple) -> None:
-        self.setting = False
-        if mouse_pos == self.click_pos:
-            self.setdirectly()
+        if self.setting:
+            self.setting = False
+            if mouse_pos == self.click_pos and self.setdirectly:
+                self.setdirectly()
 
 
 class Graph:
@@ -377,6 +406,7 @@ class Graph:
         self.a = 1
         self.b = 0
         self.c = 0
+        self.calcmode = 1
         self.points = {}
         self.draw_grid()
 
@@ -384,51 +414,51 @@ class Graph:
         self.bg.fill((0, 0, 0, 0))
 
         for i in range(self.scale, WINDOW_SIZE[1], self.scale):
-            pygame.draw.line(self.bg, (*self.window.grid_color, self.window.grid_alpha//3 if i % 50 else self.window.grid_alpha//3*2),
+            pygame.draw.line(self.bg, (*self.window.grid_color, self.window.grid_alpha//2 if i % 50 else self.window.grid_alpha),
                              (0, i), (SIDEBAR_LEFT, i), 1 if i % 50 else 2)
 
         for i in range(self.scale, SIDEBAR_LEFT, self.scale):
-            pygame.draw.line(self.bg, (*self.window.grid_color, self.window.grid_alpha//3 if i % 50 else self.window.grid_alpha//3*2),
+            pygame.draw.line(self.bg, (*self.window.grid_color, self.window.grid_alpha//2 if i % 50 else self.window.grid_alpha),
                              (i, 0), (i, WINDOW_SIZE[1]), 1 if i % 50 else 2)
 
-        pygame.draw.line(self.bg, (*self.window.grid_color, self.window.grid_alpha),
+        pygame.draw.line(self.bg, (*self.window.axis_color, self.window.axis_alpha),
                          (5, self.origin_pos[1]), (SIDEBAR_LEFT-5, self.origin_pos[1]), 3)
-        pygame.draw.lines(self.bg, (*self.window.grid_color, self.window.grid_alpha), False, (
+        pygame.draw.lines(self.bg, (*self.window.axis_color, self.window.axis_alpha), False, (
             (SIDEBAR_LEFT-15, self.origin_pos[1]-10),
             (SIDEBAR_LEFT-5, self.origin_pos[1]),
             (SIDEBAR_LEFT-15, self.origin_pos[1]+10)), 3)
-        r = self.window.fonts[1][1].render('x', True, self.window.grid_color)
-        r.set_alpha(self.window.grid_alpha)
+        r = self.window.fonts[1][1].render('x', True, self.window.axis_color)
+        r.set_alpha(self.window.axis_alpha)
         self.bg.blit(r, (SIDEBAR_LEFT-25, self.origin_pos[1]+5))
 
-        pygame.draw.line(self.bg, (*self.window.grid_color, self.window.grid_alpha),
+        pygame.draw.line(self.bg, (*self.window.axis_color, self.window.axis_alpha),
                          (self.origin_pos[0], 5), (self.origin_pos[0], SIDEBAR_LEFT-5), 3)
-        pygame.draw.lines(self.bg, (*self.window.grid_color, self.window.grid_alpha), False, (
+        pygame.draw.lines(self.bg, (*self.window.axis_color, self.window.axis_alpha), False, (
             (self.origin_pos[0]-10, 15),
             (self.origin_pos[0], 5),
             (self.origin_pos[0]+10, 15)), 3)
-        r = self.window.fonts[1][1].render('y', True, self.window.grid_color)
-        r.set_alpha(self.window.grid_alpha)
+        r = self.window.fonts[1][1].render('y', True, self.window.axis_color)
+        r.set_alpha(self.window.axis_alpha)
         rect = r.get_rect()
         rect.topright = (self.origin_pos[0]-5, 10)
         self.bg.blit(r, rect)
 
-        r = self.window.fonts[1][1].render('O', True, self.window.grid_color)
-        r.set_alpha(self.window.grid_alpha)
+        r = self.window.fonts[1][1].render('O', True, self.window.axis_color)
+        r.set_alpha(self.window.axis_alpha)
         rect = r.get_rect()
         rect.topright = (self.origin_pos[0]-5, self.origin_pos[1]+5)
         self.bg.blit(r, rect)
 
         for i in (-25, -20, -15, -10, -5, 5, 10, 15, 20, 25):
             r = self.window.fonts[1][0].render(
-                str(i), True, self.window.grid_color)
-            r.set_alpha(self.window.grid_alpha)
+                str(i), True, self.window.axis_color)
+            r.set_alpha(self.window.axis_alpha)
             rect = r.get_rect()
             rect.midtop = (self.origin_pos[0] +
                            i*self.scale, self.origin_pos[1]+5)
             self.bg.blit(r, rect)
             rect.midright = (
-                self.origin_pos[0]-5, self.origin_pos[1]+i*self.scale)
+                self.origin_pos[0]-5, self.origin_pos[1]-i*self.scale)
             self.bg.blit(r, rect)
 
     def set_point(self, id: int) -> None:
@@ -450,7 +480,7 @@ class Graph:
         pygame.mouse.set_cursor(*pygame.cursors.arrow)
 
     def get_a(self) -> float:
-        return (self.a/20)**(1/3)+0.5 if self.a > 0 else -(-self.a/20)**(1/3)+0.5
+        return (self.a/80)**(1/3)+0.5 if self.a > 0 else -(-self.a/80)**(1/3)+0.5
 
     def get_b(self) -> float:
         return self.b/20+0.5
@@ -459,7 +489,7 @@ class Graph:
         return self.c/20+0.5
 
     def set_a(self, value: float) -> None:
-        t = (value-0.5)**3*20
+        t = (value-0.5)**3*80
         self.a = my_round(t, 4 if t <= 0.01 else 3 if t <= 0.1 else 2)
 
     def set_b(self, value: float) -> None:
@@ -469,19 +499,29 @@ class Graph:
         self.c = my_round((value-0.5)*20, 1)
 
     def set_a_d(self) -> None:
-        a = easygui.enterbox('请输入绝对值不超过 2.5 的实数', '设置a', str(self.a))
+        a = easygui.enterbox(
+            '请输入绝对值不超过 10 的实数（最多精确到小数点后4位）', '设置二次项系数a')
         if not a:
             return
         try:
             a = my_round(float(a), 4)
-            assert(-2.5 <= a <= 2.5)
+            assert(-10 <= a <= 10)
             self.a = a
         except:
-            self.window.error('输入错误!')
+            self.window.error('输入有误，请重新输入!')
             self.set_a_d()
 
+    def help_a(self) -> None:
+        easygui.msgbox("""在二次函数的一般式 y=ax²+bx+c (a≠0) 中，a为二次项系数。
+a的符号决定抛物线的开口方向，a的绝对值大小决定抛物线的开口大小。
+a的绝对值越大，抛物线开口越小，开口过小时难以观察，
+所以本程序中a的取值范围为 ±10 以内。
+当a=0时，函数不是二次函数，所得的曲线也不是抛物线而是直线。
+由于a为一个较特殊的系数，本程序中a的设置与显示格式与b,c有所不同。""", '关于二次项系数a')
+
     def set_b_d(self) -> None:
-        b = easygui.enterbox('请输入绝对值不超过 10 的实数', '设置b', str(self.b))
+        b = easygui.enterbox(
+            '请输入绝对值不超过 10 的实数（最多精确到小数点后1位）', '设置一次项系数b')
         if not b:
             return
         try:
@@ -489,11 +529,17 @@ class Graph:
             assert(-10 <= b <= 10)
             self.b = b
         except:
-            self.window.error('输入错误!')
+            self.window.error('输入有误，请重新输入!')
             self.set_b_d()
 
+    def help_b(self) -> None:
+        easygui.msgbox("""在二次函数的一般式 y=ax²+bx+c (a≠0) 中，b为一次项系数。
+当a一定时，b的绝对值越大，抛物线对称轴离y轴越远，可能超出可见范围，
+所以本程序中b的取值范围为 ±10 以内。""", '关于一次项系数b')
+
     def set_c_d(self) -> None:
-        c = easygui.enterbox('请输入绝对值不超过 10 的实数', '设置c', str(self.c))
+        c = easygui.enterbox(
+            '请输入绝对值不超过 10 的实数（最多精确到小数点后1位）', '设置常数项c')
         if not c:
             return
         try:
@@ -501,41 +547,46 @@ class Graph:
             assert(-10 <= c <= 10)
             self.c = c
         except:
-            self.window.error('输入错误!')
+            self.window.error('输入有误，请重新输入!')
             self.set_c_d()
+
+    def help_c(self) -> None:
+        easygui.msgbox("""在二次函数的一般式 y=ax²+bx+c (a≠0) 中，c为常数项。
+c的绝对值越大，抛物线与y轴的交点离原点越远，可能超出可见范围
+所以本程序中c的取值范围为 ±10 以内。""", '关于常数项c')
 
     def draw(self) -> None:
         self.window.screen.blit(self.bg, (0, 0))
-        pygame.draw.lines(self.window.screen, self.window.main_color, False, [(int(self.origin_pos[0]+i*self.scale), int(self.origin_pos[1] - (
-            self.a*i**2+self.b*i+self.c)*self.scale)) for i in map(lambda x:x/self.scale, range(-self.origin_pos[0], self.origin_pos[0]))], 2)
-        if self.a:
-            t = int(self.origin_pos[0]-self.b/self.a/2*self.scale)
-            if 0 < t < SIDEBAR_LEFT:
-                for i in range(0, WINDOW_SIZE[1], 6):
-                    pygame.draw.line(self.window.screen,
-                                     self.window.main_color, (t, i), (t, i+3), 1)
-        for i in self.points.values():
-            pygame.draw.circle(self.window.screen,
-                               self.window.main_color, (int(self.origin_pos[0]+i[0]*self.scale), int(self.origin_pos[1]-i[1]*self.scale)), 5)
+        if self.calcmode & 1:
+            pygame.draw.lines(self.window.screen, self.window.main_color, False, [(int(self.origin_pos[0]+i*self.scale), int(self.origin_pos[1] - (
+                self.a*i**2+self.b*i+self.c)*self.scale)) for i in map(lambda x:x/self.scale, range(-self.origin_pos[0], self.origin_pos[0]))], 2)
+            if self.a:
+                t = int(self.origin_pos[0]-self.b/self.a/2*self.scale)
+                if 0 < t < SIDEBAR_LEFT:
+                    for i in range(0, WINDOW_SIZE[1], 6):
+                        pygame.draw.line(self.window.screen,
+                                         self.window.main_color, (t, i), (t, i+3), 1)
+        if self.calcmode & 2:
+            for i in self.points:
+                pos = (int(self.origin_pos[0]+self.points[i][0]*self.scale),
+                       int(self.origin_pos[1]-self.points[i][1]*self.scale))
+                pygame.draw.circle(self.window.screen,
+                                   self.window.main_color, pos, 10)
+                self.window.draw_text(
+                    str(i), pos, 'center', 0, 1, self.window.grid_color)
 
     def set_grid_color(self) -> None:
         """
         设置网格颜色。
         """
-        color = easygui.enterbox(
-            '请输入十六进制格式的网格颜色', default=self.window.grid_color_hex)
-        if not color:
-            return
-        if color.startswith('#') and len(color) == 7 and all(c in '0123456789abcdef' for c in color[1:]):
+        color = askcolor(self.window.grid_color_hex, '设置网格颜色')
+        if color:
             self.window.grid_color_hex = color
             self.window.grid_color = [int(color[i:i+2], 16)
                                       for i in range(1, 7, 2)]
             self.window.cp.set('window', 'grid_color', color)
             self.window.cp.write(open('config.ini', 'w', encoding='utf-8'))
             self.draw_grid()
-        else:
-            self.window.error('网格颜色格式不正确，请重新输入。')
-            self.set_grid_color()
 
     def set_grid_alpha(self, value: float) -> None:
         """
@@ -543,6 +594,28 @@ class Graph:
         """
         self.window.grid_alpha = int(value * 255)
         self.window.cp.set('window', 'grid_alpha', str(self.window.grid_alpha))
+        self.window.cp.write(open('config.ini', 'w', encoding='utf-8'))
+        self.draw_grid()
+
+    def set_axis_color(self) -> None:
+        """
+        设置坐标轴颜色。
+        """
+        color = askcolor(self.window.axis_color_hex, '设置坐标轴颜色')
+        if color:
+            self.window.axis_color_hex = color
+            self.window.axis_color = [int(color[i:i+2], 16)
+                                      for i in range(1, 7, 2)]
+            self.window.cp.set('window', 'axis_color', color)
+            self.window.cp.write(open('config.ini', 'w', encoding='utf-8'))
+            self.draw_grid()
+
+    def set_axis_alpha(self, value: float) -> None:
+        """
+        设置坐标轴不透明度（参数为小数）。
+        """
+        self.window.axis_alpha = int(value * 255)
+        self.window.cp.set('window', 'axis_alpha', str(self.window.axis_alpha))
         self.window.cp.write(open('config.ini', 'w', encoding='utf-8'))
         self.draw_grid()
 
@@ -554,7 +627,7 @@ class Sidebar:
         self.pages = {'home': '抛物线演示器', 'settings': '设置', 'calc': '计算'}
         self.icons = {name: pygame.transform.scale(pygame.image.load(
             os.path.join(RESOURCES, 'icons', name+'.png')), size) for name, size in
-            [('calc', (50, 50)), ('settings', (50, 50)), ('return', (50, 50)), ('change', (65, 30)), ('set', (65, 30))]}
+            [('calc', (50, 50)), ('settings', (50, 50)), ('return', (50, 50)), ('change', (65, 30)), ('set', (65, 30)), ('help', (20, 20))]}
         self.buttons = {}
         self.sliders = {}
         self.points_hash = 0
@@ -578,9 +651,7 @@ class Sidebar:
         elif self.graph.a == -1:
             ret += '-x²'
         elif abs(self.graph.a) >= 0.0001:
-            ret += f'{self.graph.a:.4f}x²' if abs(
-                self.graph.a) < 0.01 else f'{self.graph.a:.3f}x²' if abs(
-                self.graph.a) < 0.1 else f'{self.graph.a:.2f}x²'
+            ret += f'{my_round(self.graph.a,4 if abs(self.graph.a) < 0.01 else 3 if abs(self.graph.a) < 0.1 else 2)}x²'
 
         if ret and self.graph.b > 0:
             ret += '+'
@@ -594,7 +665,7 @@ class Sidebar:
         if ret and self.graph.c > 0:
             ret += '+'
         if self.graph.c or not ret:
-            ret += str(my_round(self.graph.c, 1))
+            ret += f'{my_round(self.graph.c, 1)}'
 
         return 'y='+ret
 
@@ -607,53 +678,170 @@ class Sidebar:
                                   if abs(self.graph.a) < 0.1 else f'a={self.graph.a:.2f}',
                                   (SIDEBAR_LEFT+10, start+80), 'topleft', 1, 1)
         self.sliders['a'].move((SIDEBAR_LEFT+145, t.centery))
+        if 'help_a' not in self.buttons:
+            self.buttons['help_a'] = Button(self.window, self.icons['help'],
+                                            (WINDOW_SIZE[0]-5, t.centery), 'midright', self.graph.help_a, 'circle', '什么是a')
+        else:
+            self.buttons['help_a'].move((WINDOW_SIZE[0]-5, t.centery))
         t = self.window.draw_text(
             f'b={my_round(self.graph.b,1)}', (SIDEBAR_LEFT+10, t.bottom+10), 'topleft', 1, 1)
         self.sliders['b'].move((SIDEBAR_LEFT+145, t.centery))
+        if 'help_b' not in self.buttons:
+            self.buttons['help_b'] = Button(self.window, self.icons['help'],
+                                            (WINDOW_SIZE[0]-5, t.centery), 'midright', self.graph.help_b, 'circle', '什么是b')
+        else:
+            self.buttons['help_b'].move((WINDOW_SIZE[0]-5, t.centery))
         t = self.window.draw_text(
             f'c={my_round(self.graph.c,1)}', (SIDEBAR_LEFT+10, t.bottom+10), 'topleft', 1, 1)
         self.sliders['c'].move((SIDEBAR_LEFT+145, t.centery))
+        if 'help_c' not in self.buttons:
+            self.buttons['help_c'] = Button(self.window, self.icons['help'],
+                                            (WINDOW_SIZE[0]-5, t.centery), 'midright', self.graph.help_c, 'circle', '什么是c')
+        else:
+            self.buttons['help_c'].move((WINDOW_SIZE[0]-5, t.centery))
         if self.graph.a:
-            start = self.window.draw_text(
-                '开口方向:向'+'上下'[self.graph.a < 0], (SIDEBAR_LEFT+10, t.bottom+10), 'topleft', 0).bottom
+            h = my_round(-self.graph.b/self.graph.a/2, 2)
+            k = my_round(self.graph.c-self.graph.b**2/self.graph.a/4, 2)
+            delta = self.graph.b**2-4*self.graph.a*self.graph.c
+            if delta > 0:
+                x = ((-self.graph.b-delta**0.5)/self.graph.a/2,
+                     (-self.graph.b+delta**0.5)/self.graph.a/2)
+            elif delta == 0:
+                x = (-self.graph.b/self.graph.a/2,)
+            else:
+                x = ()
+
             t = self.window.draw_text(
-                '对称轴:直线', (SIDEBAR_LEFT+10, start+10), 'topleft', 0)
-            start = self.window.draw_text(
-                f'x={my_round(-self.graph.b/self.graph.a/2,2)}', (t.right, t.centery), 'midleft', 0, 1).bottom
+                '开口方向:向'+'上下'[self.graph.a < 0], (SIDEBAR_LEFT+10, t.bottom+10), 'topleft', 0)
+            if 'help_kkfx' not in self.buttons:
+                self.buttons['help_kkfx'] = Button(self.window, self.icons['help'],
+                                                   (WINDOW_SIZE[0]-5, t.centery), 'midright', self.help_kkfx, 'circle', '开口方向的变化规律')
+            else:
+                self.buttons['help_kkfx'].move((WINDOW_SIZE[0]-5, t.centery))
+
             t = self.window.draw_text(
-                '顶点坐标:', (SIDEBAR_LEFT+10, start+10), 'topleft', 0)
-            start = self.window.draw_text(
-                f'({my_round(-self.graph.b/self.graph.a/2,2)},{my_round(self.graph.c-self.graph.b**2/self.graph.a/4,2)})', (t.right, t.centery), 'midleft', 0, 1).bottom
+                '对称轴:直线', (SIDEBAR_LEFT+10, t.bottom+10), 'topleft', 0)
             t = self.window.draw_text(
-                f'最{"大小"[self.graph.a > 0]}值:', (SIDEBAR_LEFT+10, start+10), 'topleft', 0)
-            start = self.window.draw_text(
-                f'x={my_round(-self.graph.b/self.graph.a/2,2)},y={my_round(self.graph.c-self.graph.b**2/self.graph.a/4,2)}', (t.right, t.centery), 'midleft', 0, 1).bottom
+                f'x={h}', (t.right, t.centery), 'midleft', 0, 1)
+            if 'help_dcz' not in self.buttons:
+                self.buttons['help_dcz'] = Button(self.window, self.icons['help'],
+                                                  (WINDOW_SIZE[0]-5, t.centery), 'midright', self.help_dcz, 'circle', '对称轴的计算方法')
+            else:
+                self.buttons['help_dcz'].move((WINDOW_SIZE[0]-5, t.centery))
+
             t = self.window.draw_text(
-                '增减性:', (SIDEBAR_LEFT+10, start+10), 'topleft', 0)
+                '顶点坐标:', (SIDEBAR_LEFT+10, t.bottom+10), 'topleft', 0)
             t = self.window.draw_text(
-                f'x>{my_round(-self.graph.b/self.graph.a/2,2)}', (t.right, t.centery), 'midleft', 0, 1)
+                f'({h},{k})', (t.right, t.centery), 'midleft', 0, 1)
+            if 'help_ddzb' not in self.buttons:
+                self.buttons['help_ddzb'] = Button(self.window, self.icons['help'],
+                                                   (WINDOW_SIZE[0]-5, t.centery), 'midright', self.help_ddzb, 'circle', '顶点坐标的计算方法')
+            else:
+                self.buttons['help_ddzb'].move((WINDOW_SIZE[0]-5, t.centery))
+
+            t = self.window.draw_text(
+                f'最{"大小"[self.graph.a > 0]}值:', (SIDEBAR_LEFT+10, t.bottom+10), 'topleft', 0)
+            t = self.window.draw_text(
+                f'x={h},y={k}', (t.right, t.centery), 'midleft', 0, 1)
+            if 'help_zz' not in self.buttons:
+                self.buttons['help_zz'] = Button(self.window, self.icons['help'],
+                                                 (WINDOW_SIZE[0]-5, t.centery), 'midright', self.help_zz, 'circle', '函数最值与抛物线顶点坐标的关系')
+            else:
+                self.buttons['help_zz'].move((WINDOW_SIZE[0]-5, t.centery))
+
+            t = self.window.draw_text(
+                '增减性:', (SIDEBAR_LEFT+10, t.bottom+10), 'topleft', 0)
+            t = self.window.draw_text(
+                f'x>{h}', (t.right, t.centery), 'midleft', 0, 1)
             t = self.window.draw_text(
                 '时，y随x的增大而'+('增大' if self.graph.a > 0 else '减小'), (t.right, t.centery), 'midleft', 0)
             t = self.window.draw_text(
-                f'x<{my_round(-self.graph.b/self.graph.a/2,2)}', (t.left, t.bottom), 'topright', 0, 1)
-            start = self.window.draw_text(
-                '时，y随x的增大而'+('增大' if self.graph.a < 0 else '减小'), (t.right, t.centery), 'midleft', 0).bottom
+                f'x<{h}', (t.left, t.bottom), 'topright', 0, 1)
             t = self.window.draw_text(
-                '与x轴的交点:', (SIDEBAR_LEFT+10, start+10), 'topleft', 0)
-            start = self.window.draw_text(','.join(map(lambda x: f'({str(my_round(eval(str(x)), 2))},0)', sympy.solve(self.graph.a*X**2+self.graph.b*X+self.graph.c, X))), (
-                t.right, t.centery), 'midleft', 0, 1).bottom if self.graph.b**2 >= 4*self.graph.a*self.graph.c else self.window.draw_text('无', (t.right, t.centery), 'midleft', 0).bottom
+                '时，y随x的增大而'+('增大' if self.graph.a < 0 else '减小'), (t.right, t.centery), 'midleft', 0)
+            if 'help_zjx' not in self.buttons:
+                self.buttons['help_zjx'] = Button(self.window, self.icons['help'],
+                                                  (WINDOW_SIZE[0]-5, t.centery), 'midright', self.help_zjx, 'circle', '增减性的变化规律')
+            else:
+                self.buttons['help_zjx'].move((WINDOW_SIZE[0]-5, t.centery))
+
             t = self.window.draw_text(
-                '与y轴的交点:', (SIDEBAR_LEFT+10, start+10), 'topleft', 0)
-            start = self.window.draw_text(
-                f'(0,{self.graph.c})', (t.right, t.centery), 'midleft', 0, 1).bottom
+                '与x轴的交点:', (SIDEBAR_LEFT+10, t.bottom+10), 'topleft', 0)
+            t = self.window.draw_text(','.join(map(lambda x: f'({my_round(x, 2)},0)', x)), (
+                t.right, t.centery), 'midleft', 0, 1) if x else self.window.draw_text('无', (t.right, t.centery), 'midleft', 0)
+            if 'help_xjd' not in self.buttons:
+                self.buttons['help_xjd'] = Button(self.window, self.icons['help'],
+                                                  (WINDOW_SIZE[0]-5, t.centery), 'midright', self.help_xjd, 'circle', '二次函数与一元二次方程的关系')
+            else:
+                self.buttons['help_xjd'].move((WINDOW_SIZE[0]-5, t.centery))
+
+            t = self.window.draw_text(
+                '与y轴的交点:', (SIDEBAR_LEFT+10, t.bottom+10), 'topleft', 0)
+            t = self.window.draw_text(
+                f'(0,{my_round(self.graph.c,2)})', (t.right, t.centery), 'midleft', 0, 1)
+            if 'help_yjd' not in self.buttons:
+                self.buttons['help_yjd'] = Button(self.window, self.icons['help'],
+                                                  (WINDOW_SIZE[0]-5, t.centery), 'midright', self.help_yjd, 'circle', '与y轴交点的计算方法')
+            else:
+                self.buttons['help_yjd'].move((WINDOW_SIZE[0]-5, t.centery))
         else:
             self.window.draw_text(
                 '该函数非二次函数，不支持分析。', (SIDEBAR_LEFT+10, t.bottom+10), 'topleft')
-        self.buttons['calc'].draw()
-        self.buttons['settings'].draw()
         self.sliders['a'].draw()
         self.sliders['b'].draw()
         self.sliders['c'].draw()
+        self.buttons['calc'].draw()
+        self.buttons['settings'].draw()
+        self.buttons['help_a'].draw()
+        self.buttons['help_b'].draw()
+        self.buttons['help_c'].draw()
+        if self.graph.a:
+            self.buttons['help_kkfx'].draw()
+            self.buttons['help_dcz'].draw()
+            self.buttons['help_ddzb'].draw()
+            self.buttons['help_zz'].draw()
+            self.buttons['help_zjx'].draw()
+            self.buttons['help_xjd'].draw()
+            self.buttons['help_yjd'].draw()
+
+    def help_kkfx(self) -> None:
+        easygui.msgbox('当a>0时，抛物线开口向上；当a<0时，抛物线开口向下。', '开口方向的变化规律')
+
+    def help_dcz(self) -> None:
+        easygui.msgbox('抛物线的对称轴为直线x=-b/2a (其中a,b分别为二次项与一次项系数)。', '对称轴的计算方法')
+
+    def help_ddzb(self) -> None:
+        easygui.msgbox("""【方法一：配方法】
+从二次函数的二次项和一次项中提出二次项系数，再将括号内式子配成完全平方，
+最终化为 y=a(x-h)²+k 的形式，这个式子被称为顶点式，
+抛物线的顶点坐标为(h,k)。
+
+【方法二：公式法】
+抛物线的顶点坐标可用公式(-b/2a,(4ac-b²)/4a)表示。
+
+【方法三：代入法】
+将抛物线的对称轴位置即顶点横坐标代入解析式，即可得到顶点纵坐标。""", '顶点坐标的计算方法')
+
+    def help_zz(self) -> None:
+        easygui.msgbox("""设抛物线的顶点坐标为(h,k)。
+若a>0，当x=h时，二次函数有最小值k；若a<0，当x=h时，二次函数有最大值k。""", '函数最值与抛物线顶点坐标的关系')
+
+    def help_zjx(self) -> None:
+        easygui.msgbox("""若a>0，抛物线对称轴左边下降，右边上升，
+即当x<h时，y随x的增大而减小，当x>h时，y随x的增大而增大；
+若a<0，抛物线对称轴左边上升，右边下降，
+即当x<h时，y随x的增大而增大，当x>h时，y随x的增大而减小。""", '增减性的变化规律')
+
+    def help_xjd(self) -> None:
+        easygui.msgbox("""抛物线 y=ax²+bx+c 与x轴交点的横坐标即为方程 ax²+bx+c=0 的解，
+与x轴交点的数量与方程的判别式(Δ=b²-4ac)有关。
+当Δ>0时，方程有两个不相等的实数根，抛物线与x轴有两个不重合的交点；
+当Δ=0时，方程有两个相等的实数根，抛物线与x轴有一个交点（两个重合的交点）；
+当Δ<0时，方程无实数根，抛物线与x轴无交点。
+""", '二次函数与一元二次方程的关系')
+
+    def help_yjd(self) -> None:
+        easygui.msgbox('抛物线与y轴交点的纵坐标即为二次函数的常数项c。', '与y轴交点的计算方法')
 
     def draw_settings(self, start) -> None:
         self.buttons['return'].draw()
@@ -671,22 +859,32 @@ class Sidebar:
                 (self.buttons['change_bg_mode'].rect.left-10, t.centery))
         self.buttons['change_bg_mode'].draw()
         self.buttons['set_bg'].draw()
-        start = self.window.draw_text(
-            '当前背景:'+self.window.background, (SIDEBAR_LEFT+10, t.bottom), 'topleft', 0).bottom
-
-        if self.window.bg_mode == 'image':
-            start = self.window.draw_text(
-                '蒙版不透明度:'+str(self.window.mask_alpha), (SIDEBAR_LEFT+10, start+10), 'topleft').bottom
+        t = self.window.draw_text(
+            '当前背景:', (SIDEBAR_LEFT+10, t.bottom), 'topleft', 0)
+        if self.window.bg_mode == 'color':
+            pygame.draw.rect(self.window.screen, self.window.bg_color,
+                             (t.right+5, t.centery-10, 20, 20), 0, 3)
+            pygame.draw.rect(self.window.screen, (255, 255, 255),
+                             (t.right+5, t.centery-10, 20, 20), 1, 3)
+        else:
+            t = self.window.draw_text(os.path.split(self.window.background)[
+                                      1], (t.right, t.centery), 'midleft', 0)
+            t = self.window.draw_text(
+                '蒙版不透明度:'+str(self.window.mask_alpha), (SIDEBAR_LEFT+10, t.bottom+10), 'topleft')
             if 'change_mask_alpha' not in self.sliders:
                 self.sliders['change_mask_alpha'] = Slider(
-                    self.window, (SIDEBAR_LEFT+10, start+15), WINDOW_SIZE[0]-SIDEBAR_LEFT-20, 10, 'topleft', 20, lambda: self.window.mask_alpha/255, self.window.set_mask_alpha)
+                    self.window, (SIDEBAR_LEFT+10, t.bottom+15), WINDOW_SIZE[0]-SIDEBAR_LEFT-20, 10, 'topleft', 20, lambda: self.window.mask_alpha/255, self.window.set_mask_alpha)
             else:
                 self.sliders['change_mask_alpha'].move(
-                    (SIDEBAR_LEFT+10, start+15))
-            start = self.sliders['change_mask_alpha'].draw().bottom
+                    (SIDEBAR_LEFT+10, t.bottom+15))
+            t = self.sliders['change_mask_alpha'].draw()
 
         t = self.window.draw_text(
-            '主题颜色:'+self.window.main_color_hex, (SIDEBAR_LEFT+10, start+10), 'topleft')
+            '主题颜色:', (SIDEBAR_LEFT+10, t.bottom+10), 'topleft')
+        pygame.draw.rect(self.window.screen, self.window.main_color,
+                         (t.right+5, t.centery-10, 20, 20), 0, 3)
+        pygame.draw.rect(self.window.screen, (255, 255, 255),
+                         (t.right+5, t.centery-10, 20, 20), 1, 3)
         if 'set_main_color' not in self.buttons:
             self.buttons['set_main_color'] = Button(self.window, self.icons['set'], (
                 WINDOW_SIZE[0]-10, t.centery), 'midright', self.window.set_main_color, 'rect')
@@ -695,7 +893,11 @@ class Sidebar:
         self.buttons['set_main_color'].draw()
 
         t = self.window.draw_text(
-            '网格颜色:'+self.window.grid_color_hex, (SIDEBAR_LEFT+10, t.bottom+10), 'topleft')
+            '网格颜色:', (SIDEBAR_LEFT+10, t.bottom+10), 'topleft')
+        pygame.draw.rect(self.window.screen, self.window.grid_color,
+                         (t.right+5, t.centery-10, 20, 20), 0, 3)
+        pygame.draw.rect(self.window.screen, (255, 255, 255),
+                         (t.right+5, t.centery-10, 20, 20), 1, 3)
         if 'set_grid_color' not in self.buttons:
             self.buttons['set_grid_color'] = Button(self.window, self.icons['set'], (
                 WINDOW_SIZE[0]-10, t.centery), 'midright', self.graph.set_grid_color, 'rect')
@@ -704,23 +906,55 @@ class Sidebar:
         self.buttons['set_grid_color'].draw()
 
         t = self.window.draw_text(
-            '网格不透明度:'+str(self.window.grid_alpha), (SIDEBAR_LEFT+10, t.bottom+10), 'topleft').bottom
+            '网格不透明度:'+str(self.window.grid_alpha), (SIDEBAR_LEFT+10, t.bottom+10), 'topleft')
         if 'change_grid_alpha' not in self.sliders:
             self.sliders['change_grid_alpha'] = Slider(
-                self.window, (SIDEBAR_LEFT+10, t+15), WINDOW_SIZE[0]-SIDEBAR_LEFT-20, 10, 'topleft', 20, lambda: self.window.grid_alpha/255, self.graph.set_grid_alpha)
+                self.window, (SIDEBAR_LEFT+10, t.bottom+15), WINDOW_SIZE[0]-SIDEBAR_LEFT-20, 10, 'topleft', 20, lambda: self.window.grid_alpha/255, self.graph.set_grid_alpha)
         else:
             self.sliders['change_grid_alpha'].move(
-                (SIDEBAR_LEFT+10, t+15))
+                (SIDEBAR_LEFT+10, t.bottom+15))
         start = self.sliders['change_grid_alpha'].draw().bottom
+
+        t = self.window.draw_text(
+            '坐标轴颜色:', (SIDEBAR_LEFT+10, start+10), 'topleft')
+        pygame.draw.rect(self.window.screen, self.window.axis_color,
+                         (t.right+5, t.centery-10, 20, 20), 0, 3)
+        pygame.draw.rect(self.window.screen, (255, 255, 255),
+                         (t.right+5, t.centery-10, 20, 20), 1, 3)
+        if 'set_axis_color' not in self.buttons:
+            self.buttons['set_axis_color'] = Button(self.window, self.icons['set'], (
+                WINDOW_SIZE[0]-10, t.centery), 'midright', self.graph.set_axis_color, 'rect')
+        else:
+            self.buttons['set_axis_color'].move((WINDOW_SIZE[0]-10, t.centery))
+        self.buttons['set_axis_color'].draw()
+
+        t = self.window.draw_text(
+            '坐标轴不透明度:'+str(self.window.axis_alpha), (SIDEBAR_LEFT+10, t.bottom+10), 'topleft')
+        if 'change_axis_alpha' not in self.sliders:
+            self.sliders['change_axis_alpha'] = Slider(
+                self.window, (SIDEBAR_LEFT+10, t.bottom+15), WINDOW_SIZE[0]-SIDEBAR_LEFT-20, 10, 'topleft', 20, lambda: self.window.axis_alpha/255, self.graph.set_axis_alpha)
+        else:
+            self.sliders['change_axis_alpha'].move(
+                (SIDEBAR_LEFT+10, t.bottom+15))
+        start = self.sliders['change_axis_alpha'].draw().bottom
 
     def draw_calc(self, start) -> None:
         self.buttons['return'].draw()
 
-        start = self.window.draw_text(
-            '三点坐标计算函数解析式', (SIDEBAR_MID, start+20), 'midtop', 2).bottom
+        t = self.window.draw_text(
+            '三点计算函数解析式', (SIDEBAR_MID, start+20), 'midtop', 2)
+
+        if 'help' not in self.buttons:
+            self.buttons['help'] = Button(self.window, self.icons['help'], (
+                WINDOW_SIZE[0]-10, t.centery), 'midright', self.help_calc, 'rect', '计算原理')
+        else:
+            self.buttons['help'].move((WINDOW_SIZE[0]-10, t.centery))
 
         t = self.window.draw_text(
-            '点 1:'+str(self.graph.points[1] if 1 in self.graph.points else '未设置'), (SIDEBAR_LEFT+10, start+10), 'topleft')
+            '请先点击“设置”，再在网格中点击格线交点处', (SIDEBAR_MID, t.bottom+10), 'midtop', 0)
+
+        t = self.window.draw_text(
+            '点 1:'+str(self.graph.points[1] if 1 in self.graph.points else '未设置'), (SIDEBAR_LEFT+10, t.bottom+10), 'topleft')
         if 'set_point_1' not in self.buttons:
             self.buttons['set_point_1'] = Button(self.window, self.icons['set'], (
                 WINDOW_SIZE[0]-10, t.centery), 'midright', lambda: self.graph.set_point(1), 'rect')
@@ -744,20 +978,33 @@ class Sidebar:
             self.buttons['set_point_3'].move((WINDOW_SIZE[0]-10, t.centery))
 
         if len(self.graph.points) == 3:
+            self.graph.calcmode = 3
             if hash(tuple(sorted(self.graph.points.values()))) != self.points_hash:
                 self.points_hash = hash(
                     tuple(sorted(self.graph.points.values())))
                 self.window.draw_text(
                     '计算中...', (SIDEBAR_MID, t.bottom+10), 'midtop', 2)
                 self.window.update()
-                tmp = sympy.solve(((A*i[0]+B)*i[0]+C-i[1]
-                                   for i in self.graph.points.values()), (A, B, C))
-                self.result_a = str(tmp[A])
-                self.graph.a = eval(self.result_a)
-                self.result_b = str(tmp[B])
-                self.graph.b = eval(self.result_b)
-                self.result_c = str(tmp[C])
-                self.graph.c = eval(self.result_c)
+                (x1, y1), (x2, y2), (x3, y3) = self.graph.points.values()
+                tmp = x1**2*x2 - x1**2*x3 - x1*x2**2 + x1*x3**2 + x2**2*x3 - x2*x3**2
+                t_a = -x1*y2 + x1*y3 + x2*y1 - x2*y3 - x3*y1 + x3*y2
+                t_b = x1**2*y2 - x1**2*y3 - x2**2*y1 + x2**2*y3 + x3**2*y1 - x3**2*y2
+                t_c = x1**2*x2*y3 - x1**2*x3*y2 - x1*x2**2 * \
+                    y3 + x1*x3**2*y2 + x2**2*x3*y1 - x2*x3**2*y1
+                self.graph.a = t_a/tmp
+                self.graph.b = t_b/tmp
+                self.graph.c = t_c/tmp
+                if tmp < 0:
+                    tmp = -tmp
+                    t_a = -t_a
+                    t_b = -t_b
+                    t_c = -t_c
+                g_a = gcd(t_a, tmp)
+                g_b = gcd(t_b, tmp)
+                g_c = gcd(t_c, tmp)
+                self.result_a = f'{t_a//g_a}/{tmp//g_a}' if tmp != g_a else f'{t_a//g_a}'
+                self.result_b = f'{t_b//g_b}/{tmp//g_b}' if tmp != g_b else f'{t_b//g_b}'
+                self.result_c = f'{t_c//g_c}/{tmp//g_c}' if tmp != g_c else f'{t_c//g_c}'
             else:
                 text = self.formula()
                 start = self.window.draw_text(
@@ -770,39 +1017,50 @@ class Sidebar:
                     'b='+self.result_b, (SIDEBAR_LEFT+10, start+10), 'topleft', 1, 1).bottom
                 self.window.draw_text(
                     'c='+self.result_c, (SIDEBAR_LEFT+10, start+10), 'topleft', 1, 1)
+        else:
+            self.graph.calcmode = 2
 
         self.buttons['set_point_1'].draw()
         self.buttons['set_point_2'].draw()
         self.buttons['set_point_3'].draw()
+        self.buttons['help'].draw()
+
+    def help_calc(self) -> None:
+        easygui.msgbox("""将三点坐标分别带入解析式并联立成三元一次方程组：
+x1²a+x1b+c=0,
+x2²a+x2b+c=0,
+x3²a+x3b+c=0.
+解出a,b,c的值即为函数各项系数。""", '计算原理')
 
     def open(self, page) -> None:
         self.page = page
         self.page_open_time = time.time()
         if page == 'home':
             self.open_home()
-            self.points_hash = 0
-            self.graph.points = {}
         elif page == 'settings':
             self.open_settings()
         elif page == 'calc':
             self.open_calc()
 
     def open_home(self) -> None:
-        self.buttons = {'calc': Button(self.window, self.icons['calc'], (SIDEBAR_LEFT+10, WINDOW_SIZE[1]-60), 'topleft', lambda: self.open('calc'), 'circle'),
+        self.points_hash = 0
+        self.graph.calcmode = 1
+        self.graph.points = {}
+        self.buttons = {'calc': Button(self.window, self.icons['calc'], (SIDEBAR_LEFT+10, WINDOW_SIZE[1]-60), 'topleft', lambda: self.open('calc'), 'circle', '计算'),
                         'settings': Button(self.window, self.icons['settings'],
-                                           (WINDOW_SIZE[0]-60, WINDOW_SIZE[1]-60), 'topleft', lambda: self.open('settings'), 'circle')}
-        self.sliders = {'a': Slider(self.window, (0, 0), WINDOW_SIZE[0]-SIDEBAR_LEFT-150, 10, 'midleft', 20,  self.graph.get_a, self.graph.set_a, self.graph.set_a_d),
-                        'b': Slider(self.window, (0, 0), WINDOW_SIZE[0]-SIDEBAR_LEFT-150, 10, 'midleft', 20,  self.graph.get_b, self.graph.set_b, self.graph.set_b_d),
-                        'c': Slider(self.window, (0, 0), WINDOW_SIZE[0]-SIDEBAR_LEFT-150, 10, 'midleft', 20,  self.graph.get_c, self.graph.set_c, self.graph.set_c_d)}
+                                           (WINDOW_SIZE[0]-60, WINDOW_SIZE[1]-60), 'topleft', lambda: self.open('settings'), 'circle', '设置')}
+        self.sliders = {'a': Slider(self.window, (0, 0), WINDOW_SIZE[0]-SIDEBAR_LEFT-180, 10, 'midleft', 20,  self.graph.get_a, self.graph.set_a, self.graph.set_a_d, '二次项系数a'),
+                        'b': Slider(self.window, (0, 0), WINDOW_SIZE[0]-SIDEBAR_LEFT-180, 10, 'midleft', 20,  self.graph.get_b, self.graph.set_b, self.graph.set_b_d, '一次项系数b'),
+                        'c': Slider(self.window, (0, 0), WINDOW_SIZE[0]-SIDEBAR_LEFT-180, 10, 'midleft', 20,  self.graph.get_c, self.graph.set_c, self.graph.set_c_d, '常数项c')}
 
     def open_settings(self) -> None:
         self.buttons = {'return': Button(self.window, self.icons['return'],
-                                         (SIDEBAR_LEFT+10, 10), 'topleft', lambda: self.open('home'), 'circle')}
+                                         (SIDEBAR_LEFT+10, 10), 'topleft', lambda: self.open('home'), 'circle', '返回')}
         self.sliders = {}
 
     def open_calc(self) -> None:
         self.buttons = {'return': Button(self.window, self.icons['return'],
-                                         (SIDEBAR_LEFT+10, 10), 'topleft', lambda: self.open('home'), 'circle')}
+                                         (SIDEBAR_LEFT+10, 10), 'topleft', lambda: self.open('home'), 'circle', '返回')}
         self.sliders = {}
 
 
